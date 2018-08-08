@@ -1,0 +1,39 @@
+{
+	"name": "volumio-livemusicarchive",
+	"version": "1.0.0",
+	"description": "An Internet Archive Live Music Archive plugin for Volumio2. Play live recordings from over 6,000 bands.",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"author": "Noah McGee (lostmyshape)",
+	"license": "ISC",
+	"volumio_info": {
+		"prettyName": "Live Music Archive",
+		"icon": "fa-music",
+		"plugin_type": "music_service"
+	},
+	"dependencies": {
+		"fs-extra": "^0.28.0",
+		"kew": "^0.7.0",
+		"v-conf": "^1.4.0",
+		"unirest": ""
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/lostmyshape/volumio-livemusicarchive.git"
+	},
+	"keywords": [
+		"Grateful",
+		"Dead",
+		"live",
+		"music",
+		"archive",
+		"audience",
+		"volumio"
+	],
+	"bugs": {
+		"url": "https://github.com/lostmyshape/volumio-livemusicarchive/issues"
+	},
+	"homepage": "https://github.com/lostmyshape/volumio-livemusicarchive#readme"
+}

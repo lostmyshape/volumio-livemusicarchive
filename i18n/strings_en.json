@@ -1,0 +1,7 @@
+{
+  "PLUGIN_CONFIGURATION":"Live Music Archive Plugin Configuration",
+  "NO_CONFIGURATION_AVAILABLE":"No configuration available",
+  "SAVE":"Save",
+  "LMA_QUERY": "Querying Internet Archive Server",
+  "QUERY_ERROR": "An error occurred while querying the Live Music Archive."
+}
