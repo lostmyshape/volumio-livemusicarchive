@@ -163,13 +163,25 @@ ControllerLiveMusicArchive.prototype.handleBrowseUri = function (curUri) {
 
 	self.logger.info("CURURI: "+curUri);
 
-	if (curUri.startsWith("livemusicarchive")) {
-		if (curUri == "livemusicarchive") {
+	if (curUri.startsWith('livemusicarchive')) {
+		if (curUri == 'livemusicarchive') {
+			//Possibly list "All Artists" then a favorites list here instead of all artists
 			self.resetHistory();
 			self.historyAdd(curUri);
 			//List band collections as root menu
 			response = self.listCollections();
 
+		}
+		else if (curUri.startsWith('livemusicarchive/collection')) {
+			//Not currently used -- all artist list if root is favorites
+			if (curUri == 'livemusicarchive/collections') {
+				self.historyAdd(curUri);
+				response = self.listCollections();
+			}
+			else {
+				self.historyAdd(curUri);
+				response = self.listYears(curUri);
+			}
 		}
 
 	}
@@ -181,8 +193,8 @@ ControllerLiveMusicArchive.prototype.handleBrowseUri = function (curUri) {
 ControllerLiveMusicArchive.prototype.listCollections = function () {
 	var self = this;
 	var defer = libQ.defer();
-	var uri = lmaApiBaseUrl + 'q=mediatype%3Acollection+AND+collection%3Aetree+AND+format%3AArchive+Bittorrent&fl[]=identifier&fl[]=title&rows=1000000&page=1&output=json';
-	console.log(uri);
+	var uri = lmaApiBaseUrl + 'q=mediatype%3Acollection+AND+collection%3Aetree+AND+format%3AArchive+Bittorrent&fl=identifier,title&rows=1000000&page=1&output=json';
+//	var uri = lmaApiBaseUrl + 'q=mediatype%3Acollection+AND+identifier%3AGratefulDead+AND+format%3AArchive+Bittorrent&fl=identifier,title&rows=10&page=1&output=json';
 
 	var response = {
 		"navigation": {
@@ -205,9 +217,10 @@ ControllerLiveMusicArchive.prototype.listCollections = function () {
 			self.historyPop();
 		}
 		else {
+			self.commandRouter.pushToastMessage('info', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('RETREIVING') + ' ' + self.getLiveMusicArchiveinI18nString('ARTISTS') + '. ' + self.getLiveMusicArchiveinI18nString('TAKE_AWHILE'));
 			for (var i = 0; i < res.body.response.docs.length; i++) {
 				var bandName = res.body.response.docs[i].title;
-				var collectionUri = 'livemusicarchive/' + res.body.response.docs[i].identifier;
+				var collectionUri = 'livemusicarchive/collection/' + res.body.response.docs[i].identifier;
 				var collectionFolder = {
 					"service": self.serviceName,
 					"type": "item-no-menu",
@@ -227,6 +240,60 @@ ControllerLiveMusicArchive.prototype.listCollections = function () {
 	return defer.promise;
 }
 
+ControllerLiveMusicArchive.prototype.listYears = function (curUri) {
+	var self = this;
+	var defer = libQ.defer();
+	var identifier = curUri.split('/')[2];
+	var uri = lmaApiBaseUrl + 'q=collection%3A'+identifier+'&fl=year&rows=1000000&page=1&output=json';
+	console.log(uri);
+
+	var response = {
+		"navigation": {
+			"lists": [
+				{
+					"availableListViews":["list"],
+					"items":[]
+				}
+			],
+			"prev":{
+				"uri":self.getPrevUri()
+			}
+		}
+	};
+
+	unirest.get(uri).end( function(res){
+		if (res.error){
+			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+			self.historyPop();
+		}
+		else {
+			self.commandRouter.pushToastMessage('info', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('RETREIVING') + ' ' + self.getLiveMusicArchiveinI18nString('YEARS') + '. ' + self.getLiveMusicArchiveinI18nString('TAKE_AWHILE'));
+			var years = res.body.response.docs;
+			years = self.removeDuplicates(years, 'year');
+			for (var i = 0; i < years.length; i++) {
+				var year = years[i].year;
+				var yearUri = 'livemusicarchive/year/'+identifier+'/'+year;
+				var yearFolder = {
+					"service": self.serviceName,
+					"type": "item-no-menu",
+					"title": year,
+					"artist": "",
+					"album": "",
+					"icon": "fa fa-calendar",
+					"uri": yearUri,
+					"sortKey": year
+				};
+				response.navigation.lists[0].items.push(yearFolder);
+			}
+			response.navigation.lists[0].items.sort(self.compareSortKey);
+
+			defer.resolve(response);
+		}
+	});
+
+	return defer.promise;
+}
 
 
 // Define a method to clear, add, and play an array of tracks
@@ -394,4 +461,20 @@ ControllerLiveMusicArchive.prototype.compareSortKey = function (a, b) {
 		comparison = -1;
 	}
 	return comparison;
+}
+
+ControllerLiveMusicArchive.prototype.removeDuplicates = function (arr, key) {
+	//from: https://www.tjcafferkey.me/remove-duplicates-from-array-of-objects/
+	if (!(arr instanceof Array) || key && typeof key !== 'string') {
+	 return false;
+	}
+	if (key && typeof key === 'string') {
+		return arr.filter((obj, index, arr) => {
+			return arr.map(mapObj => mapObj[key]).indexOf(obj[key]) === index;
+		});
+	} else {
+		return arr.filter(function(item, index, arr) {
+			return arr.indexOf(item) == index;
+		});
+	}
 }

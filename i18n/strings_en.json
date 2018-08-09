@@ -3,5 +3,9 @@
   "NO_CONFIGURATION_AVAILABLE":"No configuration available",
   "SAVE":"Save",
   "LMA_QUERY": "Querying Internet Archive Server",
-  "QUERY_ERROR": "An error occurred while querying the Live Music Archive."
+  "QUERY_ERROR": "An error occurred while querying the Live Music Archive.",
+  "RETREIVING": "Please be patient - retrieving",
+  "ARTISTS": "list of artists",
+  "YEARS": "list of years with recordings",
+  "TAKE_AWHILE": "This might take a while."
 }
