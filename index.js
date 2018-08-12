@@ -3,9 +3,10 @@
 var libQ = require('kew');
 var fs=require('fs-extra');
 var config = new (require('v-conf'))();
-var exec = require('child_process').exec;
-var execSync = require('child_process').execSync;
-var unirest = require('unirest');
+var spawn = require('child_process').spawn;
+//var exec = require('child_process').exec;
+//var execSync = require('child_process').execSync;
+//var unirest = require('unirest');
 
 var lmaApiBaseUrl = 'https://archive.org/advancedsearch.php?';
 
@@ -193,8 +194,12 @@ ControllerLiveMusicArchive.prototype.handleBrowseUri = function (curUri) {
 ControllerLiveMusicArchive.prototype.listCollections = function () {
 	var self = this;
 	var defer = libQ.defer();
-	var uri = lmaApiBaseUrl + 'q=mediatype%3Acollection+AND+collection%3Aetree+AND+format%3AArchive+Bittorrent&fl=identifier,title&rows=1000000&page=1&output=json';
-//	var uri = lmaApiBaseUrl + 'q=mediatype%3Acollection+AND+identifier%3AGratefulDead+AND+format%3AArchive+Bittorrent&fl=identifier,title&rows=10&page=1&output=json';
+
+	self.commandRouter.pushToastMessage('info', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('RETREIVING') + ' ' + self.getLiveMusicArchiveinI18nString('ARTISTS') + '. ' + self.getLiveMusicArchiveinI18nString('TAKE_AWHILE'));
+
+//	var uri = lmaApiBaseUrl + 'q=mediatype%3Acollection+AND+collection%3Aetree+AND+format%3AArchive+Bittorrent&fl=identifier,title&rows=10000&page=1&output=json';
+	var uri = lmaApiBaseUrl + 'q=mediatype%3Acollection+AND+collection%3Aetree+AND+format%3AArchive+Bittorrent&fl=identifier,title&rows=100&page=1&output=json';
+	var reqCommand = "/usr/bin/curl -X GET '"+uri+"' | /usr/bin/jq -c '.response.docs';";
 
 	var response = {
 		"navigation": {
@@ -210,31 +215,47 @@ ControllerLiveMusicArchive.prototype.listCollections = function () {
 		}
 	};
 
-	unirest.get(uri).end( function(res){
-		if (res.error){
-			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
-			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
-			self.historyPop();
-		}
-		else {
-			self.commandRouter.pushToastMessage('info', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('RETREIVING') + ' ' + self.getLiveMusicArchiveinI18nString('ARTISTS') + '. ' + self.getLiveMusicArchiveinI18nString('TAKE_AWHILE'));
-			for (var i = 0; i < res.body.response.docs.length; i++) {
-				var bandName = res.body.response.docs[i].title;
-				var collectionUri = 'livemusicarchive/collection/' + res.body.response.docs[i].identifier;
-				var collectionFolder = {
-					"service": self.serviceName,
-					"type": "item-no-menu",
-					"title": bandName,
-					"icon": "fa fa-music",
-					"uri": collectionUri,
-					"sortKey": bandName.replace(/^(?:A|The) /i, '')
-				};
-				response.navigation.lists[0].items.push(collectionFolder);
-			}
-			response.navigation.lists[0].items.sort(self.compareSortKey);
+	var reqProcess = spawn('/bin/sh', ['-c', reqCommand]);
+	var resultStr = '';
 
-			defer.resolve(response);
+	reqProcess.stdout.on('data', (data) => {
+		resultStr += data.toString();
+	});
+
+	reqProcess.on('error', (err) => {
+		self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+		self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Request for Collection list failed with error: '+err);
+		self.historyPop();
+		defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+	});
+
+	reqProcess.stderr.on('end', (data) => {
+		if (data){
+			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+			self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Command for Collection list failed with stderr: '+data);
+			self.historyPop();
+			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
 		}
+	});
+
+	reqProcess.stdout.on('end', (data) => {
+		var resultJSON = JSON.parse(resultStr);
+		for (var i = 0; i < resultJSON.length; i++) {
+			var bandName = resultJSON[i].title;
+			var collectionUri = 'livemusicarchive/collection/' + resultJSON[i].identifier;
+			var collectionFolder = {
+				"service": self.serviceName,
+				"type": "item-no-menu",
+				"title": bandName,
+				"icon": "fa fa-music",
+				"uri": collectionUri,
+				"sortKey": bandName.replace(/^(?:A|The) /i, '')
+			};
+			response.navigation.lists[0].items.push(collectionFolder);
+		}
+		response.navigation.lists[0].items.sort(self.compareSortKey);
+
+		defer.resolve(response);
 	});
 
 	return defer.promise;
@@ -243,9 +264,10 @@ ControllerLiveMusicArchive.prototype.listCollections = function () {
 ControllerLiveMusicArchive.prototype.listYears = function (curUri) {
 	var self = this;
 	var defer = libQ.defer();
-	var identifier = curUri.split('/')[2];
-	var uri = lmaApiBaseUrl + 'q=collection%3A'+identifier+'&fl=year&rows=1000000&page=1&output=json';
-	console.log(uri);
+	var identifier = self.sanatizeForBash(curUri.split('/')[2]);
+
+	var uri = lmaApiBaseUrl + 'q=collection%3A'+identifier+'&fl=year&rows=10000&page=1&output=json';
+	var reqCommand = "/usr/bin/curl -X GET '"+uri+"' | /usr/bin/jq -c '.response.docs | unique_by(.year)';";
 
 	var response = {
 		"navigation": {
@@ -261,7 +283,52 @@ ControllerLiveMusicArchive.prototype.listYears = function (curUri) {
 		}
 	};
 
-	unirest.get(uri).end( function(res){
+	var reqProcess = spawn('/bin/sh', ['-c', reqCommand]);
+	var resultStr = '';
+
+	reqProcess.stdout.on('data', (data) => {
+		resultStr += data.toString();
+	});
+
+	reqProcess.on('error', (err) => {
+		self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+		self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Request for Collection->Year list failed with error: '+err);
+		self.historyPop();
+		defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+	});
+
+	reqProcess.stderr.on('end', (data) => {
+		if (data){
+			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+			self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Command for Collection->Year list failed with stderr: '+data);
+			self.historyPop();
+			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+		}
+	});
+
+	reqProcess.stdout.on('end', (data) => {
+		var resultJSON = JSON.parse(resultStr);
+		for (var i = 0; i < resultJSON.length; i++) {
+			var year = resultJSON[i].year;
+			var yearUri = 'livemusicarchive/year/'+identifier+'/'+year;
+			var yearFolder = {
+				"service": self.serviceName,
+				"type": "item-no-menu",
+				"title": year,
+				"artist": "",
+				"album": "",
+				"icon": "fa fa-calendar",
+				"uri": yearUri,
+				"sortKey": year
+			};
+			response.navigation.lists[0].items.push(yearFolder);
+		}
+		response.navigation.lists[0].items.sort(self.compareSortKey);
+
+		defer.resolve(response);
+	});
+
+/*	unirest.get(uri).end( function(res){
 		if (res.error){
 			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
 			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
@@ -291,7 +358,7 @@ ControllerLiveMusicArchive.prototype.listYears = function (curUri) {
 			defer.resolve(response);
 		}
 	});
-
+*/
 	return defer.promise;
 }
 
@@ -477,4 +544,12 @@ ControllerLiveMusicArchive.prototype.removeDuplicates = function (arr, key) {
 			return arr.indexOf(item) == index;
 		});
 	}
+}
+
+ControllerLiveMusicArchive.prototype.sanatizeForBash = function (dirtyString) {
+  var saniString = dirtyString.replace(/_/g, '');
+  saniString = saniString.replace(/ /g, '_');
+  saniString = saniString.replace(/[^a-zA-Z0-9_]/g, '');
+  saniString = saniString.toLowerCase();
+  return saniString;
 }
