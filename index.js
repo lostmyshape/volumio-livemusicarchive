@@ -208,6 +208,7 @@ ControllerLiveMusicArchive.prototype.handleBrowseUri = function (curUri) {
   return response;
 };
 
+//List collections by Artist
 ControllerLiveMusicArchive.prototype.listCollections = function () {
 	var self = this;
 	var defer = libQ.defer();
@@ -281,10 +282,11 @@ ControllerLiveMusicArchive.prototype.listCollections = function () {
 	return defer.promise;
 }
 
+//List Years of Artist selected
 ControllerLiveMusicArchive.prototype.listYears = function (curUri) {
 	var self = this;
 	var defer = libQ.defer();
-	var identifier = self.sanatizeForBash(curUri.split('/')[2]);
+	var identifier = encodeURI(curUri.split('/')[2]);
 
 	var uri = lmaApiBaseUrl + 'q=collection%3A'+identifier+'&fl=creator,year&rows=10000&page=1&output=json';
 	var reqCommand = "/usr/bin/curl -X GET '"+uri+"' | /usr/bin/jq -c '.response.docs | unique_by(.year)';";
@@ -352,11 +354,12 @@ ControllerLiveMusicArchive.prototype.listYears = function (curUri) {
 	return defer.promise;
 }
 
+//List shows by year chosen
 ControllerLiveMusicArchive.prototype.listDates = function (curUri) {
 	var self = this;
 	var defer = libQ.defer();
-	var identifier = self.sanatizeForBash(curUri.split('/')[2]);
-	var yearQ = self.sanatizeForBash(curUri.split('/')[3]);
+	var identifier = encodeURI(curUri.split('/')[2]);
+	var yearQ = encodeURI(curUri.split('/')[3]);
 
 	var uri = lmaApiBaseUrl + 'q=collection%3A'+identifier+'+AND+year%3A'+yearQ+'&fl=creator,date,coverage,venue&rows=10000&page=1&output=json';
 	var reqCommand = "/usr/bin/curl -X GET '"+uri+"' | /usr/bin/jq -c '.response.docs | unique_by(.date)';";
@@ -431,11 +434,12 @@ ControllerLiveMusicArchive.prototype.listDates = function (curUri) {
 	return defer.promise;
 }
 
+//List sources for the date picked
 ControllerLiveMusicArchive.prototype.listSources = function (curUri) {
 	var self = this;
 	var defer = libQ.defer();
-	var identifier = self.sanatizeForBash(curUri.split('/')[2]);
-	var dateQ = self.sanatizeForBash(curUri.split('/')[3]);
+	var identifier = encodeURI(curUri.split('/')[2]);
+	var dateQ = encodeURI(curUri.split('/')[3]);
 	dateQ = [dateQ.slice(0,4),dateQ.slice(4,6),dateQ.slice(6)].join('-')+'T00:00:00Z';
 
 	var uri = lmaApiBaseUrl + 'q=collection%3A'+identifier+'+AND+date%3A'+dateQ+'&fl=creator,identifier,source,date,coverage,venue&rows=10000&page=1&output=json';
@@ -506,10 +510,10 @@ ControllerLiveMusicArchive.prototype.listSources = function (curUri) {
 	return defer.promise;
 }
 
-ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
+/*ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
 	var self = this;
 	var defer = libQ.defer();
-	var showId = self.sanatizeForBash(curUri.split('/')[2]);
+	var showId = encodeURI(curUri.split('/')[2]);
 
 	var reqCommand = "/usr/bin/curl -X GET 'https://archive.org/metadata/" + showId +"'";
 
@@ -571,8 +575,8 @@ ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
 					"type": "song",
 					"title": resultJSON.files[i].title,
 					"name": resultJSON.files[i].title,
-					"tracknumber": resultJSON.files[i].track,
-					"artist": resultJSON.files[i].creator,
+					"tracknumber": parseInt(resultJSON.files[i].track, 10),
+					"artist": artist,
 					"album": showDate+
 						(showVenue || showCity ? ',' : '')+
 						(showVenue ? ' ' + showVenue : '')+
@@ -582,7 +586,7 @@ ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
 					"albumart": "",
 					"uri": "https://archive.org/download/"+showId+"/"+resultJSON.files[i].name,
 					"duration": Math.trunc(resultJSON.files[i].mtime / 1000),
-					"sortKey": resultJSON.files[i].track
+					"sortKey": parseInt(resultJSON.files[i].track, 10)
 				};
 				response.navigation.lists[0].items.push(track);
 			}
@@ -594,7 +598,115 @@ ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
 	return defer.promise;
 
 }
+*/
 
+//list tracks when show picked
+ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
+	var self = this;
+	var defer = libQ.defer();
+	var showId = encodeURI(curUri.split('/')[2]);
+
+	var lmaDefer = self.getShowTracks(showId);
+	lmaDefer.then(function(results) {
+		var response = {
+			"navigation": {
+				"lists": [results],
+				"prev":{
+					"uri":self.getPrevUri()
+				}
+			}
+		};
+		defer.resolve(response);
+	});
+
+	return defer.promise;
+}
+
+//return list of tracks based on show id
+ControllerLiveMusicArchive.prototype.getShowTracks = function (id, sendList) {
+	var self = this;
+	var defer = libQ.defer();
+	if (sendList === undefined) sendList = true;
+	var showId = encodeURI(id);
+
+	var reqCommand = "/usr/bin/curl -X GET 'https://archive.org/metadata/" + showId +"'";
+	var response = {
+		"type":"title",
+		"title":"",
+		"availableListViews": ["list"],
+		"items":[]
+	};
+
+	var reqProcess = spawn('/bin/sh', ['-c', reqCommand]);
+	var resultStr = '';
+
+	reqProcess.stdout.on('data', (data) => {
+		resultStr += data.toString();
+	});
+
+	reqProcess.on('error', (err) => {
+		self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+		self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Request for Collection->Year list failed with error: '+err);
+		self.historyPop();
+		defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+	});
+
+	reqProcess.stderr.on('end', (data) => {
+		if (data){
+			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+			self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Command for Collection->Year list failed with stderr: '+data);
+			self.historyPop();
+			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+		}
+	});
+
+	reqProcess.stdout.on('end', (data) => {
+		var resultJSON = JSON.parse(resultStr);
+		var d = resultJSON.metadata.date;
+		d = d.split("-");
+		var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+		var showDate = months[d[1]-1] + ' ' + parseInt(d[2],10) + ', ' + d[0];
+		var artist = resultJSON.metadata.creator;
+		var showVenue = resultJSON.metadata.venue;
+		var showCity  = resultJSON.metadata.coverage;
+		response.title = artist+
+			(showVenue ? ' ' + showVenue : '')+
+			(showVenue && showCity ? ',' : '')+
+			(showCity ? ' ' + showCity : '')+
+			" on "+showDate+":";
+		for (var i = 0; i < resultJSON.files.length; i++) {
+			if (resultJSON.files[i].source.match(/original/i) && resultJSON.files[i].format.match(/flac/i) && resultJSON.files[i].format.toLowerCase().indexOf("fingerprint") === -1) {
+				var track = {
+					"service": self.serviceName,
+					"type": "song",
+					"title": resultJSON.files[i].title,
+					"name": resultJSON.files[i].title,
+					"tracknumber": parseInt(resultJSON.files[i].track, 10),
+					"artist": artist,
+					"album": showDate+
+						(showVenue || showCity ? ',' : '')+
+						(showVenue ? ' ' + showVenue : '')+
+						(showVenue && showCity ? ',' : '')+
+						(showCity ? ' ' + showCity : ''),
+					"icon": (sendList ? "fa fa-music" : ""),
+					"albumart": "",
+					"uri": (sendList ?
+						"livemusicarchive/track/"+id+"/"+resultJSON.files[i].name :
+						"https://archive.org/download/"+showId+"/"+resultJSON.files[i].name),
+					"duration": Math.trunc(resultJSON.files[i].mtime / 1000),
+					"sortKey": parseInt(resultJSON.files[i].track, 10)
+				};
+				response.items.push(track);
+			}
+		}
+		response.items.sort(self.compareSortKey);
+
+		defer.resolve(sendList ? response : response.items);
+	});
+
+	return defer.promise;
+
+}
 
 // Define a method to clear, add, and play an array of tracks
 ControllerLiveMusicArchive.prototype.clearAddPlayTrack = function(track) {
@@ -778,7 +890,7 @@ ControllerLiveMusicArchive.prototype.compareSortKey = function (a, b) {
 		});
 	}
 }
-*/
+
 
 ControllerLiveMusicArchive.prototype.sanatizeForBash = function (dirtyString) {
   var saniString = dirtyString.replace(/_/g, '');
@@ -787,3 +899,4 @@ ControllerLiveMusicArchive.prototype.sanatizeForBash = function (dirtyString) {
   saniString = saniString.toLowerCase();
   return saniString;
 }
+*/
