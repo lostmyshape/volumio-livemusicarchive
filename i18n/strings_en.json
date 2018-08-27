@@ -7,5 +7,6 @@
   "RETREIVING": "Please be patient - retrieving",
   "ARTISTS": "list of artists",
   "YEARS": "list of years with recordings",
-  "TAKE_AWHILE": "This might take a while."
+  "TAKE_AWHILE": "This might take a while.",
+  "NO_EXIST": "No recordinges exist for this artist"
 }
