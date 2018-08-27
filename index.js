@@ -198,7 +198,7 @@ ControllerLiveMusicArchive.prototype.handleBrowseUri = function (curUri) {
 		else if (curUri.startsWith('livemusicarchive/source')) {
 			//list sources for recordings on this dateUri
 			self.historyAdd(curUri);
-			response = self.listShowTracks(curUri);
+			response = self.listSourceTracks(curUri);
 		}
 
 
@@ -519,7 +519,7 @@ ControllerLiveMusicArchive.prototype.listSources = function (curUri) {
 	return defer.promise;
 }
 
-/*ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
+/*ControllerLiveMusicArchive.prototype.listSourceTracks = function (curUri) {
 	var self = this;
 	var defer = libQ.defer();
 	var showId = encodeURI(curUri.split('/')[2]);
@@ -610,12 +610,12 @@ ControllerLiveMusicArchive.prototype.listSources = function (curUri) {
 */
 
 //List tracks when show picked for menu or explodeUri
-ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
+ControllerLiveMusicArchive.prototype.listSourceTracks = function (curUri) {
 	var self = this;
 	var defer = libQ.defer();
 	var showId = encodeURI(curUri.split('/')[2]);
 
-	var lmaDefer = self.getShowTracks(showId);
+	var lmaDefer = self.getSourceTracks(showId);
 	lmaDefer.then(function(results) {
 		var response = {
 			"navigation": {
@@ -631,8 +631,8 @@ ControllerLiveMusicArchive.prototype.listShowTracks = function (curUri) {
 	return defer.promise;
 }
 
-//return list of tracks based on show id for listShowTracks or explodeUri
-ControllerLiveMusicArchive.prototype.getShowTracks = function (id, sendList) {
+//return list of tracks based on show id for listSourceTracks or explodeUri
+ControllerLiveMusicArchive.prototype.getSourceTracks = function (id, sendList) {
 	var self = this;
 	var defer = libQ.defer();
 	if (sendList === undefined) sendList = true;
@@ -709,6 +709,8 @@ ControllerLiveMusicArchive.prototype.getShowTracks = function (id, sendList) {
 			}
 		}
 		response.items.sort(self.compareSortKey);
+		//console.log("getSourceTracks response = ");
+		//console.log(response);
 
 		defer.resolve(sendList ? response : response.items);
 	});
@@ -771,7 +773,7 @@ ControllerLiveMusicArchive.prototype.getTrack = function(showId, trackId) {
 						(showVenue ? ' ' + showVenue : '')+
 						(showVenue && showCity ? ',' : '')+
 						(showCity ? ' ' + showCity : ''),
-					"icon": (sendList ? "fa fa-music" : ""),
+					"icon": "fa fa-music",
 					"albumart": "",
 					"uri": "https://archive.org/download/"+showId+"/"+trackId,
 					"duration": Math.trunc(resultJSON.files[i].mtime / 1000),
@@ -847,8 +849,29 @@ ControllerLiveMusicArchive.prototype.pushState = function(state) {
 ControllerLiveMusicArchive.prototype.explodeUri = function(uri) {
 	var self = this;
 	var defer=libQ.defer();
+	var items=[];
+	var uriSplitted = uri.split('/');
+	var sourceId = uriSplitted[2];
+	var trackId = uriSplitted[3];
 
-	// Mandatory: retrieve all info for a given URI
+	//explode for complete show source
+	if (uri.startsWith('livemusicarchive/source')) {
+		items = self.getSourceTracks(sourceId, false);
+		console.log("items = ");
+		console.log(items);
+		defer.resolve(items);
+	}
+	//explode for single track
+	else if (uri.startsWith('livemusicarchive/track')) {
+		items = self.getTrack(sourceId, trackId);
+		console.log("items = ");
+		console.log(items);
+		defer.resolve(items);
+	}
+	//sent unknown uri
+	else {
+		defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+	}
 
 	return defer.promise;
 };
