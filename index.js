@@ -154,7 +154,7 @@ ControllerLiveMusicArchive.prototype.addToBrowseSources = function () {
 			uri: 'livemusicarchive',
 			plugin_type: 'music_service',
 			plugin_name: 'volumio-livemusicarchive',
-			albumart: '/albumart?sourceicon=music_service/volumio-livemusicarchive/livemusicarchive.svg'
+			albumart: '/albumart?sourceicon=music_service/volumio-livemusicarchive/livemusicarchive.png'
 	});
 };
 
@@ -519,96 +519,6 @@ ControllerLiveMusicArchive.prototype.listSources = function (curUri) {
 	return defer.promise;
 }
 
-/*ControllerLiveMusicArchive.prototype.listSourceTracks = function (curUri) {
-	var self = this;
-	var defer = libQ.defer();
-	var showId = encodeURI(curUri.split('/')[2]);
-
-	var reqCommand = "/usr/bin/curl -X GET 'https://archive.org/metadata/" + showId +"'";
-
-	var response = {
-		"navigation": {
-			"lists": [],
-			"prev":{
-				"uri":self.getPrevUri()
-			}
-		}
-	};
-
-	var reqProcess = spawn('/bin/sh', ['-c', reqCommand]);
-	var resultStr = '';
-
-	reqProcess.stdout.on('data', (data) => {
-		resultStr += data.toString();
-	});
-
-	reqProcess.on('error', (err) => {
-		self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
-		self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Request for Collection->Year list failed with error: '+err);
-		self.historyPop();
-		defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
-	});
-
-	reqProcess.stderr.on('end', (data) => {
-		if (data){
-			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
-			self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Command for Collection->Year list failed with stderr: '+data);
-			self.historyPop();
-			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
-		}
-	});
-
-	reqProcess.stdout.on('end', (data) => {
-		var resultJSON = JSON.parse(resultStr);
-		var d = resultJSON.metadata.date;
-		d = d.split("-");
-		var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-		var showDate = months[d[1]-1] + ' ' + parseInt(d[2],10) + ', ' + d[0];
-		var artist = resultJSON.metadata.creator;
-		var showVenue = resultJSON.metadata.venue;
-		var showCity  = resultJSON.metadata.coverage;
-		response.navigation.lists.push({
-			"type":"title",
-			"title":artist+
-				(showVenue ? ' ' + showVenue : '')+
-				(showVenue && showCity ? ',' : '')+
-				(showCity ? ' ' + showCity : '')+
-				" on "+showDate+":",
-			"availableListViews": ["list"],
-			"items":[]
-		});
-		for (var i = 0; i < resultJSON.files.length; i++) {
-			if (resultJSON.files[i].source.match(/original/i) && resultJSON.files[i].format.match(/flac/i) ) {
-				var track = {
-					"service": self.serviceName,
-					"type": "song",
-					"title": resultJSON.files[i].title,
-					"name": resultJSON.files[i].title,
-					"tracknumber": parseInt(resultJSON.files[i].track, 10),
-					"artist": artist,
-					"album": showDate+
-						(showVenue || showCity ? ',' : '')+
-						(showVenue ? ' ' + showVenue : '')+
-						(showVenue && showCity ? ',' : '')+
-						(showCity ? ' ' + showCity : ''),
-					"icon": "fa fa-music",
-					"albumart": "",
-					"uri": "https://archive.org/download/"+showId+"/"+resultJSON.files[i].name,
-					"duration": Math.trunc(resultJSON.files[i].mtime / 1000),
-					"sortKey": parseInt(resultJSON.files[i].track, 10)
-				};
-				response.navigation.lists[0].items.push(track);
-			}
-		}
-		response.navigation.lists[0].items.sort(self.compareSortKey);
-		defer.resolve(response);
-	});
-
-	return defer.promise;
-
-}
-*/
-
 //List tracks when show picked for menu or explodeUri
 ControllerLiveMusicArchive.prototype.listSourceTracks = function (curUri) {
 	var self = this;
@@ -683,6 +593,15 @@ ControllerLiveMusicArchive.prototype.getSourceTracks = function (id, sendList) {
 			(showVenue && showCity ? ',' : '')+
 			(showCity ? ' ' + showCity : '')+
 			" on "+showDate+":";
+		var artFile = "";
+		for (var i = 0; i < resultJSON.files.length; i++) {
+			if (resultJSON.files[i].name.toLowerCase().indexOf(".jpg") >= 0 && resultJSON.files[i].name.toLowerCase().indexOf("thumb") === -1) {
+				artFile = resultJSON.files[i].name;
+			 	break;
+			}
+		}
+
+		//Check for FLAC version first
 		for (var i = 0; i < resultJSON.files.length; i++) {
 			if (resultJSON.files[i].source.match(/original/i) && resultJSON.files[i].format.match(/flac/i) && resultJSON.files[i].format.toLowerCase().indexOf("fingerprint") === -1) {
 				var track = {
@@ -697,20 +616,48 @@ ControllerLiveMusicArchive.prototype.getSourceTracks = function (id, sendList) {
 						(showVenue ? ' ' + showVenue : '')+
 						(showVenue && showCity ? ',' : '')+
 						(showCity ? ' ' + showCity : ''),
-					"icon": (sendList ? "fa fa-music" : ""),
-					"albumart": "",
+					//(sendList ? "fa fa-music" : ""),
+					"albumart": (artFile ? "https://archive.org/download/"+showId+"/"+artFile : "/albumart?sourceicon=music_service/volumio-livemusicarchive/lma-cover.png"),
 					"uri": (sendList ?
 						"livemusicarchive/track/"+id+"/"+resultJSON.files[i].name :
 						"https://archive.org/download/"+showId+"/"+resultJSON.files[i].name),
-					"duration": Math.trunc(resultJSON.files[i].mtime / 1000),
+					"duration": Math.round(resultJSON.files[i].length), //Math.trunc(resultJSON.files[i].mtime / 1000),
 					"sortKey": parseInt(resultJSON.files[i].track, 10)
 				};
 				response.items.push(track);
 			}
 		}
+
+		if (!Array.isArray(response.items) || !response.items.length) {
+			console.log("No FLACs, let's get mp3s");
+			for (var i = 0; i < resultJSON.files.length; i++) {
+				if (resultJSON.files[i].format.match(/mp3/i) && resultJSON.files[i].format.toLowerCase().indexOf("fingerprint") === -1) {
+					var track = {
+						"service": self.serviceName,
+						"type": "song",
+						"title": resultJSON.files[i].title,
+						"name": resultJSON.files[i].title,
+						"tracknumber": parseInt(resultJSON.files[i].track, 10),
+						"artist": artist,
+						"album": showDate+
+							(showVenue || showCity ? ',' : '')+
+							(showVenue ? ' ' + showVenue : '')+
+							(showVenue && showCity ? ',' : '')+
+							(showCity ? ' ' + showCity : ''),
+						//(sendList ? "fa fa-music" : ""),
+						"albumart": (artFile ? "https://archive.org/download/"+showId+"/"+artFile : "/albumart?sourceicon=music_service/volumio-livemusicarchive/lma-cover.png"),
+						"uri": (sendList ?
+							"livemusicarchive/track/"+id+"/"+resultJSON.files[i].name :
+							"https://archive.org/download/"+showId+"/"+resultJSON.files[i].name),
+						"duration": Math.round(resultJSON.files[i].length), //Math.trunc(resultJSON.files[i].mtime / 1000),
+						"sortKey": parseInt(resultJSON.files[i].track, 10)
+					};
+					response.items.push(track);
+				}
+			}
+		}
+
 		response.items.sort(self.compareSortKey);
-		//console.log("getSourceTracks response = ");
-		//console.log(response);
 
 		defer.resolve(sendList ? response : response.items);
 	});
@@ -759,6 +706,14 @@ ControllerLiveMusicArchive.prototype.getTrack = function(showId, trackId) {
 		var artist = resultJSON.metadata.creator;
 		var showVenue = resultJSON.metadata.venue;
 		var showCity  = resultJSON.metadata.coverage;
+		var artFile = "";
+		for (var i = 0; i < resultJSON.files.length; i++) {
+			if (resultJSON.files[i].name.toLowerCase().indexOf(".jpg") >= 0 && resultJSON.files[i].name.toLowerCase().indexOf("thumb") === -1) {
+				artFile = resultJSON.files[i].name;
+			 	break;
+			}
+		}
+
 		for (var i = 0; i < resultJSON.files.length; i++) {
 			if (resultJSON.files[i].name == trackId) {
 				var response = [{
@@ -773,10 +728,10 @@ ControllerLiveMusicArchive.prototype.getTrack = function(showId, trackId) {
 						(showVenue ? ' ' + showVenue : '')+
 						(showVenue && showCity ? ',' : '')+
 						(showCity ? ' ' + showCity : ''),
-					"icon": "fa fa-music",
-					"albumart": "",
+					//"icon": "fa fa-music",
+					"albumart": (artFile ? "https://archive.org/download/"+showId+"/"+artFile : "/albumart?sourceicon=music_service/volumio-livemusicarchive/lma-cover.png"),
 					"uri": "https://archive.org/download/"+showId+"/"+trackId,
-					"duration": Math.trunc(resultJSON.files[i].mtime / 1000),
+					"duration": Math.round(resultJSON.files[i].length), //Math.trunc(resultJSON.files[i].mtime / 1000),
 					"sortKey": parseInt(resultJSON.files[i].track, 10)
 				}];
 			}
@@ -794,39 +749,142 @@ ControllerLiveMusicArchive.prototype.clearAddPlayTrack = function(track) {
 	var self = this;
 	self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::clearAddPlayTrack');
 
-	self.commandRouter.logger.info(JSON.stringify(track));
+	var safeUri = track.uri.replace(/"/g,'\\"');
 
-	return self.sendSpopCommand('uplay', [track.uri]);
-};
+	var phListenerCallback = () => {
+		self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive: MPD player state update');
+		self.mpdPlugin.getState()
+			.then(function(state) {
+				var selectedTrackBlock = self.commandRouter.stateMachine.getTrack(self.commandRouter.stateMachine.currentPosition);
+				if (selectedTrackBlock.service && selectedTrackBlock.service=='volumio-livemusicarchive') {
+					self.mpdPlugin.clientMpd.once('system-player', phListenerCallback);
+					return self.pushState(state);
+				} else {
+					self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive: Not a Phish.in track, removing listener');
+				}
+			});
+	};
+
+	return self.mpdPlugin.sendMpdCommand('stop',[])
+		.then(function()
+		{
+			return self.mpdPlugin.sendMpdCommand('clear',[]);
+		})
+		.then(function()
+		{
+			return self.mpdPlugin.sendMpdCommand('load "'+safeUri+'"',[]);
+		})
+		.fail(function (e) {
+			return self.mpdPlugin.sendMpdCommand('add "'+safeUri+'"',[]);
+		})
+		.then(function()
+		{
+			self.mpdPlugin.clientMpd.removeAllListeners('system-player');
+			self.mpdPlugin.clientMpd.once('system-player', phListenerCallback);
+
+			return self.mpdPlugin.sendMpdCommand('play', [])
+				.then(function () {
+					return self.mpdPlugin.getState()
+						.then(function (state) {
+							return self.pushState(state);
+						});
+				});
+		});
+}
+
+ControllerLiveMusicArchive.prototype.clearAddPlayTracks = function(arrayTrackIds) {
+	console.log(arrayTrackIds);
+}
+
 
 ControllerLiveMusicArchive.prototype.seek = function (timepos) {
-    this.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::seek to ' + timepos);
-
-    return this.sendSpopCommand('seek '+timepos, []);
-};
+	var self = this;
+  this.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::seek to ' + timepos);
+	return self.mpdPlugin.seek(timepos);
+}
 
 // Stop
 ControllerLiveMusicArchive.prototype.stop = function() {
 	var self = this;
 	self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::stop');
+	return self.mpdPlugin.stop()
+		.then(function () {
+			return self.mpdPlugin.getState()
+				.then(function (state) {
+					return self.pushState(state);
+				});
+		});
+}
 
-
-};
-
-// Spop pause
+// Pause
 ControllerLiveMusicArchive.prototype.pause = function() {
 	var self = this;
 	self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::pause');
 
+	return self.mpdPlugin.pause()
+		.then(function () {
+			return self.mpdPlugin.getState()
+				.then(function (state) {
+					return self.pushState(state);
+				});
+		});
+}
 
-};
+// Resume
+ControllerLiveMusicArchive.prototype.resume = function() {
+	var self = this;
+  self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::resume');
+	return self.mpdPlugin.resume()
+		.then(function () {
+			return self.mpdPlugin.getState()
+				.then(function (state) {
+					return self.pushState(state);
+				});
+		});
+}
+
+// Next
+ControllerLiveMusicArchive.prototype.next = function() {
+	var self = this;
+  self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::next');
+	return self.mpdPlugin.sendMpdCommand('next', [])
+		.then(function () {
+    	return self.mpdPlugin.getState()
+				.then(function (state) {
+					return self.pushState(state);
+    		});
+  	});
+}
+
+// Previous
+ControllerLiveMusicArchive.prototype.previous = function() {
+	var self = this;
+  self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::previous');
+	return self.mpdPlugin.sendMpdCommand('previous', [])
+		.then(function () {
+    	return self.mpdPlugin.getState()
+				.then(function (state) {
+					return self.pushState(state);
+				});
+  	});
+}
+
+// prefetch for gapless Playback
+ControllerLiveMusicArchive.prototype.prefetch = function(nextTrack) {
+	var self = this;
+	self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::prefetch');
+
+	var safeUri = nextTrack.uri.replace(/"/g,'\\"');
+	return self.mpdPlugin.sendMpdCommand('add "' + safeUri + '"', [])
+		.then(function() {
+			return self.mpdPlugin.sendMpdCommand('consume 1',[]);
+		});
+}
 
 // Get state
 ControllerLiveMusicArchive.prototype.getState = function() {
 	var self = this;
 	self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::getState');
-
-
 };
 
 //Parse state
@@ -842,9 +900,8 @@ ControllerLiveMusicArchive.prototype.pushState = function(state) {
 	var self = this;
 	self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive::pushState');
 
-	return self.commandRouter.servicePushState(state, self.servicename);
+	return self.commandRouter.servicePushState(state, self.serviceName);
 };
-
 
 ControllerLiveMusicArchive.prototype.explodeUri = function(uri) {
 	var self = this;
@@ -857,15 +914,11 @@ ControllerLiveMusicArchive.prototype.explodeUri = function(uri) {
 	//explode for complete show source
 	if (uri.startsWith('livemusicarchive/source')) {
 		items = self.getSourceTracks(sourceId, false);
-		console.log("items = ");
-		console.log(items);
 		defer.resolve(items);
 	}
 	//explode for single track
 	else if (uri.startsWith('livemusicarchive/track')) {
 		items = self.getTrack(sourceId, trackId);
-		console.log("items = ");
-		console.log(items);
 		defer.resolve(items);
 	}
 	//sent unknown uri
