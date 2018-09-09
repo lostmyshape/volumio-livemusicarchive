@@ -4,9 +4,6 @@ var libQ = require('kew');
 var fs=require('fs-extra');
 var config = new (require('v-conf'))();
 var spawn = require('child_process').spawn;
-//var exec = require('child_process').exec;
-//var execSync = require('child_process').execSync;
-//var unirest = require('unirest');
 
 var lmaApiBaseUrl = 'https://archive.org/advancedsearch.php?';
 
@@ -621,7 +618,7 @@ ControllerLiveMusicArchive.prototype.getSourceTracks = function (id, sendList) {
 					"uri": (sendList ?
 						"livemusicarchive/track/"+id+"/"+resultJSON.files[i].name :
 						"https://archive.org/download/"+showId+"/"+resultJSON.files[i].name),
-					"duration": Math.round(resultJSON.files[i].length), //Math.trunc(resultJSON.files[i].mtime / 1000),
+					"duration": Math.round(resultJSON.files[i].length),
 					"sortKey": parseInt(resultJSON.files[i].track, 10)
 				};
 				response.items.push(track);
@@ -649,7 +646,7 @@ ControllerLiveMusicArchive.prototype.getSourceTracks = function (id, sendList) {
 						"uri": (sendList ?
 							"livemusicarchive/track/"+id+"/"+resultJSON.files[i].name :
 							"https://archive.org/download/"+showId+"/"+resultJSON.files[i].name),
-						"duration": Math.round(resultJSON.files[i].length), //Math.trunc(resultJSON.files[i].mtime / 1000),
+						"duration": Math.round(resultJSON.files[i].length),
 						"sortKey": parseInt(resultJSON.files[i].track, 10)
 					};
 					response.items.push(track);
@@ -731,7 +728,7 @@ ControllerLiveMusicArchive.prototype.getTrack = function(showId, trackId) {
 					//"icon": "fa fa-music",
 					"albumart": (artFile ? "https://archive.org/download/"+showId+"/"+artFile : "/albumart?sourceicon=music_service/volumio-livemusicarchive/lma-cover.png"),
 					"uri": "https://archive.org/download/"+showId+"/"+trackId,
-					"duration": Math.round(resultJSON.files[i].length), //Math.trunc(resultJSON.files[i].mtime / 1000),
+					"duration": Math.round(resultJSON.files[i].length),
 					"sortKey": parseInt(resultJSON.files[i].track, 10)
 				}];
 			}
@@ -971,8 +968,64 @@ ControllerLiveMusicArchive.prototype.getAlbumArt = function (data, path) {
 ControllerLiveMusicArchive.prototype.search = function (query) {
 	var self=this;
 	var defer=libQ.defer();
+	var searchCrit = query.value.replace(/ /g, '+');
+	var searchCrit = encodeURI(searchCrit).replace(/'/g, '%27');
+	var list = [{
+		'type': 'title',
+		'title': 'Live Music Archive Collections',
+		'availableListViews': ["list"],
+		'items': []
+	}];
 
-	// Mandatory, search. You can divide the search in sections using following functions
+	self.resetHistory();
+
+	var searchUri = 'https://archive.org/advancedsearch.php?q=collection%3Aetree+AND+mediatype%3Acollection+AND+format%3A%28Archive+BitTorrent%29+AND+'+searchCrit+'&fl=identifier,title&rows=10000&page=1&output=json';
+	var reqCommand = "/usr/bin/curl -X GET '"+searchUri+"' | /usr/bin/jq -c '.response.docs';";
+	var reqProcess = spawn('/bin/sh', ['-c', reqCommand]);
+	var resultStr = '';
+console.log(searchUri);
+
+	reqProcess.stdout.on('data', (data) => {
+		resultStr += data.toString();
+	});
+
+	reqProcess.on('error', (err) => {
+		self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+		self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Request for Collection list failed with error: '+err);
+		self.historyPop();
+		defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+	});
+
+	reqProcess.stderr.on('end', (data) => {
+		if (data){
+			self.commandRouter.pushToastMessage('error', self.getLiveMusicArchiveinI18nString('LMA_QUERY'), self.getLiveMusicArchiveinI18nString('QUERY_ERROR'));
+			self.commandRouter.pushConsoleMessage('[' + Date.now() + '] ' + 'ControllerLiveMusicArchive:Command for Collection list failed with stderr: '+data);
+			self.historyPop();
+			defer.reject(new Error(self.getLiveMusicArchiveinI18nString('QUERY_ERROR')));
+		}
+	});
+
+	reqProcess.stdout.on('end', (data) => {
+		var resultJSON = JSON.parse(resultStr);
+console.log(resultJSON);
+		for (var i = 0; i < resultJSON.length; i++) {
+			var bandName = resultJSON[i].title;
+			var collectionUri = 'livemusicarchive/collection/' + resultJSON[i].identifier;
+			var collectionFolder = {
+				"service": self.serviceName,
+				"type": "item-no-menu",
+				"title": bandName,
+				"icon": "fa fa-music",
+				"uri": collectionUri,
+				"sortKey": bandName.replace(/^(?:A|The) /i, '')
+			};
+			list[0].items.push(collectionFolder);
+		}
+		list[0].items.sort(self.compareSortKey);
+
+		defer.resolve(list);
+	});
+
 
 	return defer.promise;
 };
@@ -1029,29 +1082,3 @@ ControllerLiveMusicArchive.prototype.compareSortKey = function (a, b) {
 	}
 	return comparison;
 }
-
-/*ControllerLiveMusicArchive.prototype.removeDuplicates = function (arr, key) {
-	//from: https://www.tjcafferkey.me/remove-duplicates-from-array-of-objects/
-	if (!(arr instanceof Array) || key && typeof key !== 'string') {
-	 return false;
-	}
-	if (key && typeof key === 'string') {
-		return arr.filter((obj, index, arr) => {
-			return arr.map(mapObj => mapObj[key]).indexOf(obj[key]) === index;
-		});
-	} else {
-		return arr.filter(function(item, index, arr) {
-			return arr.indexOf(item) == index;
-		});
-	}
-}
-
-
-ControllerLiveMusicArchive.prototype.sanatizeForBash = function (dirtyString) {
-  var saniString = dirtyString.replace(/_/g, '');
-  saniString = saniString.replace(/ /g, '_');
-  saniString = saniString.replace(/[^a-zA-Z0-9_-]/g, '');
-  saniString = saniString.toLowerCase();
-  return saniString;
-}
-*/
