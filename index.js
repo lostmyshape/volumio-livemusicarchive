@@ -601,11 +601,17 @@ ControllerLiveMusicArchive.prototype.getSourceTracks = function (id, sendList) {
 		//Check for FLAC version first
 		for (var i = 0; i < resultJSON.files.length; i++) {
 			if (resultJSON.files[i].source.match(/original/i) && resultJSON.files[i].format.match(/flac/i) && resultJSON.files[i].format.toLowerCase().indexOf("fingerprint") === -1) {
+				var trackName = resultJSON.files[i].title
+					? resultJSON.files[i].title
+					: resultJSON.files[i].track
+					? "Track "+parseInt(resultJSON.files[i].track, 10)+" ("+resultJSON.files[i].name+")"
+					: resultJSON.files[i].name;
 				var track = {
 					"service": self.serviceName,
 					"type": "song",
-					"title": resultJSON.files[i].title,
-					"name": resultJSON.files[i].title,
+					"trackType": "flac",
+					"title": trackName,
+					"name": trackName,
 					"tracknumber": parseInt(resultJSON.files[i].track, 10),
 					"artist": artist,
 					"album": showDate+
@@ -626,14 +632,55 @@ ControllerLiveMusicArchive.prototype.getSourceTracks = function (id, sendList) {
 		}
 
 		if (!Array.isArray(response.items) || !response.items.length) {
-			console.log("No FLACs, let's get mp3s");
+			console.log("No FLAC, let's try Ogg Vorbis");
 			for (var i = 0; i < resultJSON.files.length; i++) {
-				if (resultJSON.files[i].format.match(/mp3/i) && resultJSON.files[i].format.toLowerCase().indexOf("fingerprint") === -1) {
+				if (resultJSON.files[i].format.match(/ogg/i) && resultJSON.files[i].format.toLowerCase().indexOf("fingerprint") === -1) {
+					var trackName = resultJSON.files[i].title
+						? resultJSON.files[i].title
+						: resultJSON.files[i].track
+						? "Track "+parseInt(resultJSON.files[i].track, 10)+" ("+resultJSON.files[i].name+")"
+						: resultJSON.files[i].name;
 					var track = {
 						"service": self.serviceName,
 						"type": "song",
-						"title": resultJSON.files[i].title,
-						"name": resultJSON.files[i].title,
+						"trackType": "ogg",
+						"title": trackName,
+						"name": trackName,
+						"tracknumber": parseInt(resultJSON.files[i].track, 10),
+						"artist": artist,
+						"album": showDate+
+							(showVenue || showCity ? ',' : '')+
+							(showVenue ? ' ' + showVenue : '')+
+							(showVenue && showCity ? ',' : '')+
+							(showCity ? ' ' + showCity : ''),
+						//(sendList ? "fa fa-music" : ""),
+						"albumart": (artFile ? "https://archive.org/download/"+showId+"/"+artFile : "/albumart?sourceicon=music_service/volumio-livemusicarchive/lma-cover.png"),
+						"uri": (sendList ?
+							"livemusicarchive/track/"+id+"/"+resultJSON.files[i].name :
+							"https://archive.org/download/"+showId+"/"+resultJSON.files[i].name),
+						"duration": Math.round(resultJSON.files[i].length),
+						"sortKey": parseInt(resultJSON.files[i].track, 10)
+					};
+					response.items.push(track);
+				}
+			}
+		}
+
+		if (!Array.isArray(response.items) || !response.items.length) {
+			console.log("No FLAC or Ogg Vorbis, let's get mp3s");
+			for (var i = 0; i < resultJSON.files.length; i++) {
+				if (resultJSON.files[i].format.match(/mp3/i) && resultJSON.files[i].format.toLowerCase().indexOf("fingerprint") === -1) {
+					var trackName = resultJSON.files[i].title
+						? resultJSON.files[i].title
+						: resultJSON.files[i].track
+						? "Track "+parseInt(resultJSON.files[i].track, 10)+" ("+resultJSON.files[i].name+")"
+						: resultJSON.files[i].name;
+					var track = {
+						"service": self.serviceName,
+						"type": "song",
+						"trackType": "mp3",
+						"title": trackName,
+						"name": trackName,
 						"tracknumber": parseInt(resultJSON.files[i].track, 10),
 						"artist": artist,
 						"album": showDate+
@@ -713,11 +760,24 @@ ControllerLiveMusicArchive.prototype.getTrack = function(showId, trackId) {
 
 		for (var i = 0; i < resultJSON.files.length; i++) {
 			if (resultJSON.files[i].name == trackId) {
+				var fileFormat = resultJSON.files[i].format.match(/flac/i)
+  				? "flac"
+  				: resultJSON.files[i].format.match(/ogg/i)
+  				? "ogg"
+  				: resultJSON.files[i].format.match(/mp3/i)
+  				? "mp3"
+  				: "";
+				var trackName = resultJSON.files[i].title
+					? resultJSON.files[i].title
+					: resultJSON.files[i].track
+					? "Track "+parseInt(resultJSON.files[i].track, 10)+" ("+resultJSON.files[i].name+")"
+					: resultJSON.files[i].name;
 				var response = [{
 					"service": self.serviceName,
 					"type": "song",
-					"title": resultJSON.files[i].title,
-					"name": resultJSON.files[i].title,
+					"trackType": fileFormat,
+					"title": trackName,
+					"name": trackName,
 					"tracknumber": parseInt(resultJSON.files[i].track, 10),
 					"artist": artist,
 					"album": showDate+
@@ -983,7 +1043,6 @@ ControllerLiveMusicArchive.prototype.search = function (query) {
 	var reqCommand = "/usr/bin/curl -X GET '"+searchUri+"' | /usr/bin/jq -c '.response.docs';";
 	var reqProcess = spawn('/bin/sh', ['-c', reqCommand]);
 	var resultStr = '';
-console.log(searchUri);
 
 	reqProcess.stdout.on('data', (data) => {
 		resultStr += data.toString();
@@ -1022,6 +1081,8 @@ console.log(resultJSON);
 			list[0].items.push(collectionFolder);
 		}
 		list[0].items.sort(self.compareSortKey);
+
+		if(list[0].items.length < 1 || list[0].items == undefined){list = null};
 
 		defer.resolve(list);
 	});
